@@ -4,8 +4,9 @@
 #include <sys/time.h>
 #include <string.h>
 #include <assert.h>
-
+#include <immintrin.h>
 #include <xmmintrin.h>
+#include "impl.h"
 
 #define TEST_W 4096
 #define TEST_H 4096
@@ -14,7 +15,6 @@
  * sse_transpose, sse_prefetch_transpose
  */
 
-#include "impl.c"
 
 static long diff_in_us(struct timespec t1, struct timespec t2)
 {
@@ -47,7 +47,7 @@ int main(int argc, char *argv[])
             printf("\n");
         }
         printf("\n");
-        sse_transpose(testin, testout, 4, 4);
+        AVX_transpose(testin, testout, 4, 4);
         for (int y = 0; y < 4; y++) {
             for (int x = 0; x < 4; x++)
                 printf(" %2d", testout[y * 4 + x]);
@@ -61,33 +61,60 @@ int main(int argc, char *argv[])
         struct timespec start, end;
         int *src  = (int *) malloc(sizeof(int) * TEST_W * TEST_H);
         int *out0 = (int *) malloc(sizeof(int) * TEST_W * TEST_H);
-        int *out1 = (int *) malloc(sizeof(int) * TEST_W * TEST_H);
-        int *out2 = (int *) malloc(sizeof(int) * TEST_W * TEST_H);
+
 
         srand(time(NULL));
         for (int y = 0; y < TEST_H; y++)
             for (int x = 0; x < TEST_W; x++)
                 *(src + y * TEST_W + x) = rand();
-
+#if defined(sse_prefetch)
         clock_gettime(CLOCK_REALTIME, &start);
         sse_prefetch_transpose(src, out0, TEST_W, TEST_H);
         clock_gettime(CLOCK_REALTIME, &end);
         printf("sse prefetch: \t %ld us\n", diff_in_us(start, end));
+#endif
 
+#if defined(AVX_prefetch)
         clock_gettime(CLOCK_REALTIME, &start);
-        sse_transpose(src, out1, TEST_W, TEST_H);
+        AVX_prefetch_transpose(src, out0, TEST_W, TEST_H);
+        clock_gettime(CLOCK_REALTIME, &end);
+        printf("AVX prefetch: \t %ld us\n", diff_in_us(start, end));
+#endif
+
+#if defined(AVX_prefetchV2)
+        clock_gettime(CLOCK_REALTIME, &start);
+        AVX_prefetchV2_transpose(src, out0, TEST_W, TEST_H);
+        clock_gettime(CLOCK_REALTIME, &end);
+        printf("AVX prefetchV2: \t %ld us\n", diff_in_us(start, end));
+#endif
+
+
+
+
+#if defined(AVX)
+        clock_gettime(CLOCK_REALTIME, &start);
+        AVX_transpose(src, out0, TEST_W, TEST_H);
+        clock_gettime(CLOCK_REALTIME, &end);
+        printf("AVX: \t\t %ld us\n", diff_in_us(start, end));
+#endif
+
+#if defined(sse)
+        clock_gettime(CLOCK_REALTIME, &start);
+        sse_transpose(src, out0, TEST_W, TEST_H);
         clock_gettime(CLOCK_REALTIME, &end);
         printf("sse: \t\t %ld us\n", diff_in_us(start, end));
+#endif
 
+#if defined(naive)
         clock_gettime(CLOCK_REALTIME, &start);
-        naive_transpose(src, out2, TEST_W, TEST_H);
+        naive_transpose(src, out0, TEST_W, TEST_H);
         clock_gettime(CLOCK_REALTIME, &end);
         printf("naive: \t\t %ld us\n", diff_in_us(start, end));
+#endif
 
         free(src);
         free(out0);
-        free(out1);
-        free(out2);
+
     }
 
     return 0;
